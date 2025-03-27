@@ -26,6 +26,10 @@ async function run() {
       .db("hotlancer-dashboard")
       .collection("components");
 
+    const domainCollection = client
+      .db("hotlancer-dashboard")
+      .collection("domains");
+
     // Create a new component
     app.post("/create-component", async (req, res) => {
       const component = req.body;
@@ -38,12 +42,110 @@ async function run() {
     });
 
     app.get("/components", async (req, res) => {
+      const origin = req.headers.origin;
+
+      const isExisted = await domainCollection.findOne({
+        domainNameList: origin,
+      });
+      if (!isExisted) {
+        return res.status(400).json({
+          success: false,
+          message: "you are not allowed to access ",
+        });
+      }
+
       const result = await componentCollection.find().toArray();
       res.status(200).json({
         success: true,
         message: "Components fetched successfully",
         result,
       });
+    });
+
+    app.post("/create-domain", async (req, res) => {
+      try {
+        const domain = req.body;
+        const result = await domainCollection.insertOne(domain);
+        res.status(200).json({
+          success: true,
+          message: "Domain created successfully",
+          result,
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "Something went wrong!!",
+          error,
+        });
+      }
+    });
+
+    app.get("/domains", async (req, res) => {
+      const {
+        domain,
+        search,
+        sortField,
+        sortOrder = "asc",
+        page = 1,
+        limit = 10,
+        filterField,
+        filterValue,
+      } = req.query;
+      try {
+        // Build the query object for filtering
+        const query = {};
+        if (domain) {
+          query.domain = domain; // Exact match for 'domain'
+        }
+        if (search) {
+          query.$text = { $search: search }; // Text search (requires text index in MongoDB)
+        }
+        if (filterField && filterValue) {
+          query[filterField] = filterValue; // Generic field filtering
+        }
+
+        // Determine sorting order
+        const sortOptions = {};
+        if (sortField) {
+          sortOptions[sortField] = sortOrder === "asc" ? 1 : -1;
+        }
+
+        // Calculate pagination values
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const limitValue = parseInt(limit);
+
+        // Fetch the data with query, sorting, and pagination
+        const result = await domainCollection
+          .find(query)
+          .sort(sortOptions)
+          .skip(skip)
+          .limit(limitValue)
+          .toArray();
+
+        // Fetch total count for pagination metadata
+        const totalItems = await domainCollection.countDocuments(query);
+        const totalPages = Math.ceil(totalItems / limitValue);
+
+        res.status(200).json({
+          success: true,
+          message: "Domains fetched successfully",
+          data: {
+            items: result,
+            pagination: {
+              totalItems,
+              totalPages,
+              currentPage: parseInt(page),
+              itemsPerPage: limitValue,
+            },
+          },
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "Something went wrong!!",
+          error,
+        });
+      }
     });
 
     // Send a ping to confirm a successful connection
