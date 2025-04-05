@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const app = express();
 
@@ -59,6 +59,15 @@ async function run() {
         success: true,
         message: "Components fetched successfully",
         result,
+      });
+    });
+
+    app.delete("/delete-component/:id", async (req, res) => {
+      const id = req.params.id;
+      await componentCollection.deleteOne({ _id: new ObjectId(id) });
+      res.status(200).json({
+        success: true,
+        message: "Component deleted successfully",
       });
     });
 
